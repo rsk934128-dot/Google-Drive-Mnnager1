@@ -1,0 +1,6 @@
+{
+  "name": "Google Drive Manager",
+  "description": "Browse, search, upload, organize, preview, and manage files in your Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

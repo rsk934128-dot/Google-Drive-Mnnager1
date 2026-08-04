@@ -1,0 +1,29 @@
+{
+  "short_name": "DriveManager AI",
+  "name": "Google Drive Manager AI",
+  "description": "একটি আধুনিক, দ্রুত এবং কৃত্রিম বুদ্ধিমত্তা (Gemini AI) চালিত Google Drive Management System",
+  "icons": [
+    {
+      "src": "/icon-192.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app_logo.jpg",
+      "sizes": "1024x1024",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "any"
+}
