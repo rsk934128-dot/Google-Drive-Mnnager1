@@ -1,10 +1,10 @@
 # 📂 Google Drive Manager AI (গুগল ড্রাইভ ম্যানেজার)
 
 <p align="center">
-  <img src="./src/assets/images/app_logo_1785870607984.jpg" alt="Google Drive AI Manager Logo" width="120" style="border-radius: 20px;" />
+  <img src="/images/app_logo_1785870607984.jpg" alt="Google Drive AI Manager Logo" width="120" style="border-radius: 20px;" />
 </p>
 
-![Google Drive Manager Hero](./src/assets/images/drive_app_hero_1785870491332.jpg)
+![Google Drive Manager Hero](/images/drive_app_hero_1785870491332.jpg)
 
 একটি আধুনিক, দ্রুত এবং কৃত্রিম বুদ্ধিমত্তা (Gemini AI) চালিত **Google Drive Management System**। এর মাধ্যমে আপনি নিরাপদে আপনার গুগল ড্রাইভের ফাইলসমূহ ব্রাউজ, সার্চ, প্রিভিউ, আপলোড, স্টার্ট (Star) এবং এআই এর সাহায্যে সামারাইজ (Summarize) করতে পারবেন।
 
@@ -12,7 +12,7 @@
 
 ## 🎨 অ্যাপের ইন্টারফেস ও এআই ফিচারসমূহ (UI & AI Features)
 
-![AI Features & Smart Dashboard](./src/assets/images/drive_ai_features_1785870505151.jpg)
+![AI Features & Smart Dashboard](/images/drive_ai_features_1785870505151.jpg)
 
 ---
 

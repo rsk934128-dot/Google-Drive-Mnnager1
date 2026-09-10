@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, LayoutGrid, List, RefreshCw, X, Sparkles, User, Check, Plus, ChevronDown, ShieldCheck, Download, Smartphone, Menu, Bell } from "lucide-react";
+import { Search, LayoutGrid, List, RefreshCw, X, Sparkles, User, Check, Plus, ChevronDown, ShieldCheck, Download, Smartphone, Menu, Bell, WifiOff } from "lucide-react";
 import { ViewMode, UserProfile, AppNotification } from "../types";
 import { NotificationCenter } from "./NotificationCenter";
 
@@ -26,6 +26,7 @@ interface HeaderProps {
   notifications: AppNotification[];
   onMarkNotificationAsRead: (id: string) => void;
   onClearNotifications: () => void;
+  isOffline?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   notifications,
   onMarkNotificationAsRead,
   onClearNotifications,
+  isOffline = false,
 }) => {
   const [localQuery, setLocalQuery] = useState(searchQuery);
   const [showAccountMenu, setShowAccountMenu] = useState<boolean>(false);
@@ -137,16 +139,22 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="h-16 border-b border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-20">
-      {/* Mobile Menu Button */}
-      {onOpenMobileMenu && (
-        <button
-          onClick={onOpenMobileMenu}
-          className="md:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-          title="Open Menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-      )}
+      {/* Mobile Menu Button & Brand Logo */}
+      <div className="flex items-center gap-2">
+        {onOpenMobileMenu && (
+          <button
+            onClick={onOpenMobileMenu}
+            className="md:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+            title="Open Menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        
+        <div className="md:hidden flex items-center gap-2">
+          <img src="/icon-192.png" alt="Logo" className="w-8 h-8 rounded-lg" />
+        </div>
+      </div>
 
       {/* Search Input */}
       <div className="relative flex-1 max-w-xl">
@@ -223,15 +231,27 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Right Controls */}
       <div className="flex items-center gap-2">
         {/* Sync Status Indicator */}
-        {isRefreshing && (
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full border border-blue-100 dark:border-blue-800/50 animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="relative">
-              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-sm shadow-blue-500/50" />
-              <div className="absolute inset-0 w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping opacity-75" />
+        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all duration-300">
+          {isRefreshing ? (
+            <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+              <div className="relative">
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                <div className="absolute inset-0 w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping opacity-75" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest">Syncing...</span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest">Updating</span>
-          </div>
-        )}
+          ) : isOffline ? (
+            <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800/50">
+              <WifiOff className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Local Mode</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/50">
+              <ShieldCheck className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Cloud Synced</span>
+            </div>
+          )}
+        </div>
 
         {/* Install App Button */}
         {onOpenInstallModal && (

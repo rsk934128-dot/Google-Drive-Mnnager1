@@ -1137,6 +1137,7 @@ export default function App() {
           notifications={notifications}
           onMarkNotificationAsRead={markNotificationAsRead}
           onClearNotifications={clearNotifications}
+          isOffline={isOffline}
         />
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 md:pb-6 space-y-6">
@@ -1239,7 +1240,7 @@ export default function App() {
                       <div className="relative mb-8">
                         <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
                         <img 
-                          src="/src/assets/images/drive_hero_illustration_1789047466923.jpg" 
+                          src="/images/drive_hero_illustration_1789047466923.jpg" 
                           alt="Empty Drive" 
                           className="relative w-72 h-auto rounded-3xl shadow-2xl border border-white/20 dark:border-slate-800"
                           referrerPolicy="no-referrer"

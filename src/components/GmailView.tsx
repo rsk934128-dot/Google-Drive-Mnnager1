@@ -26,7 +26,7 @@ export const GmailView: React.FC<GmailViewProps> = ({ messages, loading, onRefre
         <div className="relative mb-8">
           <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
           <img 
-            src="/src/assets/images/gmail_hero_illustration_1789047482471.jpg" 
+            src="/images/gmail_hero_illustration_1789047482471.jpg" 
             alt="Empty Inbox" 
             className="relative w-72 h-auto rounded-3xl shadow-2xl border border-white/20 dark:border-slate-800"
             referrerPolicy="no-referrer"

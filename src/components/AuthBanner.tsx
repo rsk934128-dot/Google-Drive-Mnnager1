@@ -13,7 +13,7 @@ export const AuthBanner: React.FC<AuthBannerProps> = ({ onLogin, onDemoMode, onO
       <div className="relative mb-8">
         <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full animate-pulse" />
         <img
-          src="/src/assets/images/welcome_illustration_1789047495953.jpg"
+          src="/images/welcome_illustration_1789047495953.jpg"
           alt="Welcome"
           className="relative w-80 h-auto rounded-3xl shadow-2xl border border-white/20 dark:border-slate-800"
           referrerPolicy="no-referrer"

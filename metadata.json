@@ -1,6 +1,6 @@
 {
-  "name": "Google Drive Manager",
-  "description": "Browse, search, upload, organize, preview, and manage files in your Google Drive.",
+  "name": "Google Drive Manager AI",
+  "description": "Browse, search, upload, organize, preview, and manage files in your Google Drive with Gemini AI.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
