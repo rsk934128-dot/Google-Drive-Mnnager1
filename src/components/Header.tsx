@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, LayoutGrid, List, RefreshCw, X, Sparkles, User, Check, Plus, ChevronDown, ShieldCheck, Download, Smartphone, Menu, Bell, WifiOff } from "lucide-react";
+import { Search, LayoutGrid, List, RefreshCw, X, Sparkles, User, Check, Plus, ChevronDown, Download, Smartphone, Menu, Bell, WifiOff, Cloud, CloudOff } from "lucide-react";
 import { ViewMode, UserProfile, AppNotification } from "../types";
 import { NotificationCenter } from "./NotificationCenter";
 
@@ -231,24 +231,21 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Right Controls */}
       <div className="flex items-center gap-2">
         {/* Sync Status Indicator */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all duration-300">
+        <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/40 transition-all duration-300">
           {isRefreshing ? (
-            <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              <div className="relative">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                <div className="absolute inset-0 w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping opacity-75" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest">Syncing...</span>
+            <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Syncing</span>
             </div>
           ) : isOffline ? (
-            <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800/50">
-              <WifiOff className="w-3 h-3" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Local Mode</span>
+            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+              <CloudOff className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Local</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/50">
-              <ShieldCheck className="w-3 h-3" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Cloud Synced</span>
+            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+              <Cloud className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Synced</span>
             </div>
           )}
         </div>
