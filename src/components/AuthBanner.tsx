@@ -9,10 +9,20 @@ interface AuthBannerProps {
 
 export const AuthBanner: React.FC<AuthBannerProps> = ({ onLogin, onDemoMode, onOpenInstallModal }) => {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center max-w-xl mx-auto">
+    <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center max-w-xl mx-auto animate-in fade-in duration-700">
+      <div className="relative mb-8">
+        <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full animate-pulse" />
+        <img
+          src="/src/assets/images/welcome_illustration_1789047495953.jpg"
+          alt="Welcome"
+          className="relative w-80 h-auto rounded-3xl shadow-2xl border border-white/20 dark:border-slate-800"
+          referrerPolicy="no-referrer"
+        />
+      </div>
+
       <div className="relative mb-6">
         <img
-          src="/src/assets/images/app_logo_1785870607984.jpg"
+          src="/icon-192.png"
           alt="Google Drive AI Logo"
           className="w-20 h-20 rounded-2xl object-cover shadow-2xl ring-4 ring-blue-500/20 dark:ring-blue-400/30 animate-pulse"
         />

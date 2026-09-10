@@ -16,8 +16,16 @@ import {
   PieChart,
   Download,
   X,
+  Keyboard,
+  Clock,
+  History,
+  FileUp,
+  Trash,
+  ArrowRightLeft,
+  Undo,
+  Mail,
 } from "lucide-react";
-import { FilterCategory, StorageQuota, UserProfile } from "../types";
+import { FilterCategory, StorageQuota, UserProfile, Activity } from "../types";
 import { formatBytes } from "../lib/driveUtils";
 
 interface SidebarProps {
@@ -31,6 +39,10 @@ interface SidebarProps {
   onLogin: () => void;
   onLogout: () => void;
   onOpenInstallModal?: () => void;
+  onOpenShortcuts?: () => void;
+  activities?: Activity[];
+  viewMode?: "drive" | "gmail";
+  onViewChange?: (view: "drive" | "gmail") => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -46,6 +58,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogin,
   onLogout,
   onOpenInstallModal,
+  onOpenShortcuts,
+  activities = [],
+  viewMode = "drive",
+  onViewChange,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
@@ -78,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between gap-3 px-2">
           <div className="flex items-center gap-3">
             <img
-              src="/src/assets/images/app_logo_1785870607984.jpg"
+              src="/icon-192.png"
               alt="Google Drive AI Manager Logo"
               className="w-10 h-10 rounded-xl object-cover shadow-md border border-slate-200/50 dark:border-slate-700/50"
             />
@@ -127,29 +143,117 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
+        {/* Workspace Switcher */}
+        <nav className="space-y-1">
+          <div className="px-3 pb-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Workspace
+          </div>
+          <button
+            onClick={() => onViewChange?.("drive")}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer min-h-[40px] ${
+              viewMode === "drive"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60"
+            }`}
+          >
+            <Cloud className="w-4 h-4" />
+            <span>Google Drive</span>
+          </button>
+          <button
+            onClick={() => onViewChange?.("gmail")}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer min-h-[40px] ${
+              viewMode === "gmail"
+                ? "bg-rose-600 text-white shadow-md shadow-rose-600/20"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60"
+            }`}
+          >
+            <Mail className="w-4 h-4" />
+            <span>Gmail</span>
+          </button>
+        </nav>
+
         {/* Navigation Categories */}
         <nav className="space-y-1">
           <div className="px-3 pb-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            Files & Folders
+            {viewMode === "drive" ? "Files & Folders" : "Gmail Labels"}
           </div>
-          {navItems.map((item) => {
-            const isActive = currentFilter === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleFilterClick(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer min-h-[44px] ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                }`}
-              >
-                {item.icon}
-                <span>{item.label}</span>
+          {viewMode === "drive" ? (
+            navItems.map((item) => {
+              const isActive = currentFilter === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleFilterClick(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer min-h-[44px] ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-semibold"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </button>
+              );
+            })
+          ) : (
+            <>
+              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 font-semibold cursor-pointer min-h-[44px]">
+                <Mail className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                <span>Inbox</span>
               </button>
-            );
-          })}
+              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60 cursor-pointer min-h-[44px]">
+                <Star className="w-5 h-5 text-slate-400" />
+                <span>Starred</span>
+              </button>
+              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/60 cursor-pointer min-h-[44px]">
+                <Clock className="w-5 h-5 text-slate-400" />
+                <span>Snoozed</span>
+              </button>
+            </>
+          )}
         </nav>
+
+        {/* Recent Activity Panel */}
+        {isAuthenticated && activities.length > 0 && (
+          <div className="space-y-3 px-1">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <History className="w-3.5 h-3.5" />
+                Recent Activity
+              </div>
+            </div>
+            <div className="space-y-1">
+              {activities.slice(0, 5).map((activity) => (
+                <div 
+                  key={activity.id}
+                  className="flex items-start gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors group cursor-default"
+                >
+                  <div className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${
+                    activity.type === 'upload' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' :
+                    activity.type === 'delete' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30' :
+                    activity.type === 'move' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30' :
+                    activity.type === 'restore' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30' :
+                    'bg-slate-100 text-slate-600 dark:bg-slate-800'
+                  }`}>
+                    {activity.type === 'upload' && <FileUp className="w-3 h-3" />}
+                    {activity.type === 'delete' && <Trash className="w-3 h-3" />}
+                    {activity.type === 'move' && <ArrowRightLeft className="w-3 h-3" />}
+                    {activity.type === 'restore' && <Undo className="w-3 h-3" />}
+                    {(activity.type === 'rename' || activity.type === 'star' || activity.type === 'unstar' || activity.type === 'create_folder') && <Clock className="w-3 h-3" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-slate-700 dark:text-slate-200 truncate leading-tight">
+                      {activity.fileName}
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      {activity.type.charAt(0).toUpperCase() + activity.type.slice(1).replace('_', ' ')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer: User & Storage Status */}
@@ -208,7 +312,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Account Info / Login Button */}
-        {isAuthenticated ? (
+        <div className="space-y-1">
+          {onOpenShortcuts && (
+            <button
+              onClick={() => {
+                onOpenShortcuts();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer group"
+            >
+              <Keyboard className="w-4 h-4 group-hover:text-blue-500 transition-colors" />
+              <span className="text-sm font-medium">Keyboard Shortcuts</span>
+              <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                Ctrl+Shift+K
+              </span>
+            </button>
+          )}
+
+          {isAuthenticated ? (
           <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-2.5 overflow-hidden">
               {user?.picture ? (
@@ -255,6 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Sign in with Google</span>
           </button>
         )}
+        </div>
       </div>
     </div>
   );

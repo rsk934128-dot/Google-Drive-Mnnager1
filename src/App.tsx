@@ -1,4 +1,24 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { auth, db } from "./lib/firebase";
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser
+} from "firebase/auth";
+import { 
+  doc, 
+  setDoc, 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  addDoc, 
+  serverTimestamp,
+  getDocs,
+  writeBatch
+} from "firebase/firestore";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Breadcrumb } from "./components/Breadcrumb";
@@ -18,6 +38,10 @@ import { MoveModal } from "./components/MoveModal";
 import { BatchSelectionBar } from "./components/BatchSelectionBar";
 import { AuthBanner } from "./components/AuthBanner";
 import { InstallModal } from "./components/InstallModal";
+import { KeyboardShortcutsModal } from "./components/KeyboardShortcutsModal";
+import { GmailView } from "./components/GmailView";
+import { GmailThreadView } from "./components/GmailThreadView";
+import { ComposeEmailModal } from "./components/ComposeEmailModal";
 import {
   DriveFile,
   UserProfile,
@@ -25,8 +49,12 @@ import {
   FilterCategory,
   ViewMode,
   BreadcrumbItem,
+  Activity,
+  ActivityType,
+  GmailMessage,
+  AppNotification,
 } from "./types";
-import { Loader2, Folder, HardDrive, AlertCircle, Check, WifiOff, Cloud } from "lucide-react";
+import { Loader2, Folder, HardDrive, AlertCircle, Check, WifiOff, Cloud, Clock, Mail } from "lucide-react";
 
 const DEMO_FILES: DriveFile[] = [
   {
@@ -139,6 +167,150 @@ export default function App() {
   const [summaryFile, setSummaryFile] = useState<DriveFile | null>(null);
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [appView, setAppView] = useState<"drive" | "gmail">("drive");
+  const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
+  const [loadingGmail, setLoadingGmail] = useState<boolean>(false);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState<boolean>(false);
+  const [lastKeyPressed, setLastKeyPressed] = useState<string | null>(null);
+  const [lastKeyTime, setLastKeyTime] = useState<number>(0);
+
+  // Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      if (user) {
+        // Save user profile to Firestore
+        const userDoc = doc(db, "users", user.uid);
+        setDoc(userDoc, {
+          name: user.displayName,
+          email: user.email,
+          picture: user.photoURL,
+          lastLogin: serverTimestamp(),
+        }, { merge: true });
+
+        // Subscribe to activities
+        const qAct = query(
+          collection(db, "activities", user.uid, "items"),
+          orderBy("timestamp", "desc")
+        );
+        const unsubscribeActivities = onSnapshot(qAct, (snapshot) => {
+          const loadedActivities = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toMillis() || Date.now(),
+          })) as Activity[];
+          setActivities(loadedActivities);
+        });
+
+        // Subscribe to notifications
+        const qNotif = query(
+          collection(db, "notifications", user.uid, "items"),
+          orderBy("timestamp", "desc")
+        );
+        const unsubscribeNotifications = onSnapshot(qNotif, (snapshot) => {
+          const loadedNotifications = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp?.toMillis() || Date.now(),
+          })) as AppNotification[];
+          setNotifications(loadedNotifications);
+        });
+
+        return () => {
+          unsubscribeActivities();
+          unsubscribeNotifications();
+        };
+      } else {
+        setActivities([]);
+        setNotifications([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const addNotification = useCallback(async (title: string, message: string, type: AppNotification["type"], link?: string) => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        await addDoc(collection(db, "notifications", user.uid, "items"), {
+          title,
+          message,
+          type,
+          read: false,
+          timestamp: serverTimestamp(),
+          link: link || "",
+        });
+      } catch (e) {
+        console.error("Error adding notification:", e);
+      }
+    }
+  }, []);
+
+  const markNotificationAsRead = useCallback(async (id: string) => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        await setDoc(doc(db, "notifications", user.uid, "items", id), {
+          read: true
+        }, { merge: true });
+      } catch (e) {
+        console.error("Error marking notification as read:", e);
+      }
+    }
+  }, []);
+
+  const clearNotifications = useCallback(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        const q = query(collection(db, "notifications", user.uid, "items"));
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+      } catch (e) {
+        console.error("Error clearing notifications:", e);
+      }
+    }
+  }, []);
+
+  const addActivity = useCallback(async (type: ActivityType, fileName: string, details?: string) => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        await addDoc(collection(db, "activities", user.uid, "items"), {
+          type,
+          fileName,
+          timestamp: serverTimestamp(),
+          details: details || "",
+        });
+      } catch (e) {
+        console.error("Error adding activity to Firestore:", e);
+      }
+    } else {
+      // Fallback to local storage if not logged in (demo mode)
+      const newActivity: Activity = {
+        id: Math.random().toString(36).substring(7),
+        type,
+        fileName,
+        timestamp: Date.now(),
+        details,
+      };
+      setActivities((prev) => {
+        const updated = [newActivity, ...prev].slice(0, 50);
+        localStorage.setItem("drive_manager_activities", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -236,7 +408,22 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        setQuota(data.storageQuota || null);
+        const q = data.storageQuota || null;
+        setQuota(q);
+
+        // Storage Warning Notification
+        if (q && q.limit && q.usage) {
+          const limitNum = parseInt(q.limit, 10);
+          const usageNum = parseInt(q.usage, 10);
+          if (limitNum > 0 && (usageNum / limitNum) > 0.9) {
+            addNotification(
+              "Storage Warning",
+              `Your Google Drive is almost full (${Math.round((usageNum/limitNum)*100)}%). Please consider clearing some space.`,
+              "storage"
+            );
+          }
+        }
+        
         if (data.user && !user) {
           setUser({
             name: data.user.displayName,
@@ -306,6 +493,40 @@ export default function App() {
     }
   }, [isAuthenticated, isDemoMode, currentFilter, currentFolderId, searchQuery, getAuthHeaders]);
 
+  const lastMessageIdRef = useRef<string | null>(null);
+
+  const loadGmailMessages = useCallback(async () => {
+    if (!isAuthenticated || isDemoMode) return;
+    setLoadingGmail(true);
+    try {
+      const res = await fetch("/api/gmail/messages", {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const messages = data.messages || [];
+        setGmailMessages(messages);
+
+        // Notify if there's a new message
+        if (messages.length > 0 && lastMessageIdRef.current !== messages[0].id) {
+          if (lastMessageIdRef.current !== null) {
+            addNotification(
+              "New Gmail Message",
+              `From: ${messages[0].from?.split("<")[0].trim() || "Unknown"}\nSubject: ${messages[0].subject}`,
+              "gmail",
+              messages[0].threadId
+            );
+          }
+          lastMessageIdRef.current = messages[0].id;
+        }
+      }
+    } catch (err) {
+      console.error("Gmail load error:", err);
+    } finally {
+      setLoadingGmail(false);
+    }
+  }, [isAuthenticated, isDemoMode, getAuthHeaders, addNotification]);
+
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
@@ -313,30 +534,46 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) {
       loadDriveAbout();
-      loadFiles();
+      if (appView === "drive") {
+        loadFiles();
+      }
     }
-  }, [isAuthenticated, loadDriveAbout, loadFiles]);
+  }, [isAuthenticated, appView, loadDriveAbout, loadFiles]);
+
+  useEffect(() => {
+    if (isAuthenticated && appView === "gmail") {
+      loadGmailMessages();
+      const interval = setInterval(loadGmailMessages, 30000); // Check every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, appView, loadGmailMessages]);
 
   // Handlers
-  const handleLogin = () => {
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
-    
-    // Check if inside iframe
-    const isIframe = window.self !== window.top;
-    if (isIframe) {
-      const popup = window.open(
-        "/auth/google",
-        "google_oauth_popup",
-        `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes,scrollbars=yes`
-      );
-      if (!popup || popup.closed || typeof popup.closed === "undefined") {
-        window.open("/auth/google", "_blank");
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      
+      const width = 600;
+      const height = 700;
+      const left = window.screenX + (window.innerWidth - width) / 2;
+      const top = window.screenY + (window.innerHeight - height) / 2;
+      
+      const isIframe = window.self !== window.top;
+      if (isIframe) {
+        const popup = window.open(
+          "/auth/google",
+          "google_oauth_popup",
+          `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes,scrollbars=yes`
+        );
+        if (!popup || popup.closed || typeof popup.closed === "undefined") {
+          window.open("/auth/google", "_blank");
+        }
+      } else {
+        window.location.href = "/auth/google";
       }
-    } else {
-      window.location.href = "/auth/google";
+    } catch (error) {
+      console.error("Firebase Login Error:", error);
     }
   };
 
@@ -351,6 +588,7 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      await signOut(auth);
       await fetch("/auth/logout", { method: "POST" });
     } catch {}
     localStorage.removeItem("drive_access_token");
@@ -431,6 +669,13 @@ export default function App() {
         }),
       });
       if (res.ok) {
+        const deletedFileNames = files
+          .filter((f) => selectedFileIds.includes(f.id))
+          .map((f) => f.name);
+        
+        deletedFileNames.forEach(name => {
+          addActivity("delete", name, isPermanent ? "Permanently deleted" : "Moved to trash");
+        });
         setFiles((prev) => prev.filter((f) => !selectedFileIds.includes(f.id)));
         setSelectedFileIds([]);
         loadDriveAbout();
@@ -458,6 +703,10 @@ export default function App() {
         }),
       });
       if (res.ok) {
+        const movedFiles = files.filter((f) => selectedFileIds.includes(f.id));
+        movedFiles.forEach(f => {
+          addActivity("move", f.name, "Moved to folder");
+        });
         setFiles((prev) => prev.filter((f) => !selectedFileIds.includes(f.id)));
         setSelectedFileIds([]);
         loadDriveAbout();
@@ -484,6 +733,10 @@ export default function App() {
         }),
       });
       if (res.ok) {
+        const restoredFiles = files.filter((f) => selectedFileIds.includes(f.id));
+        restoredFiles.forEach(f => {
+          addActivity("restore", f.name, "Restored from trash");
+        });
         setFiles((prev) => prev.filter((f) => !selectedFileIds.includes(f.id)));
         setSelectedFileIds([]);
         loadDriveAbout();
@@ -492,6 +745,27 @@ export default function App() {
       console.error("Batch restore error:", err);
     } finally {
       setBatchActionLoading(false);
+    }
+  };
+
+  const handleStar = async (file: DriveFile) => {
+    try {
+      const res = await fetch(`/api/drive/files/${file.id}/star`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ starred: !file.starred }),
+      });
+      if (res.ok) {
+        addActivity(file.starred ? "unstar" : "star", file.name);
+        setFiles((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, starred: !f.starred } : f))
+        );
+      }
+    } catch (err) {
+      console.error("Star toggle error:", err);
     }
   };
 
@@ -509,8 +783,26 @@ export default function App() {
         return;
       }
 
+      // Ctrl + Shift + K: Open Shortcuts
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setIsShortcutsModalOpen(true);
+        return;
+      }
+
+      // /: Focus Search
+      if (e.key === "/") {
+        e.preventDefault();
+        document.getElementById("search-input")?.focus();
+        return;
+      }
+
       // Escape: clear selection or close open modals
       if (e.key === "Escape") {
+        if (isShortcutsModalOpen) {
+          setIsShortcutsModalOpen(false);
+          return;
+        }
         if (previewFile) {
           setPreviewFile(null);
         } else if (activeMobileActionFile) {
@@ -525,6 +817,70 @@ export default function App() {
           setIsUploadModalOpen(false);
         } else if (selectedFileIds.length > 0) {
           setSelectedFileIds([]);
+        }
+      }
+
+      // N: New Folder
+      if (e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setIsNewFolderModalOpen(true);
+      }
+
+      // U: Upload
+      if (e.key.toLowerCase() === "u") {
+        e.preventDefault();
+        setIsUploadModalOpen(true);
+      }
+
+      // Shift + A: AI Assistant
+      if (e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setIsAiAssistantOpen(true);
+      }
+
+      // V: Toggle View Mode
+      if (e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        setViewMode((prev) => (prev === "grid" ? "list" : "grid"));
+      }
+
+      // S: Star selected
+      if (e.key.toLowerCase() === "s" && selectedFileIds.length === 1) {
+        e.preventDefault();
+        const fileToStar = files.find((f) => f.id === selectedFileIds[0]);
+        if (fileToStar) handleStar(fileToStar);
+      }
+
+      // M: Move selected
+      if (e.key.toLowerCase() === "m" && selectedFileIds.length > 0) {
+        e.preventDefault();
+        setIsMoveModalOpen(true);
+      }
+
+      // Navigation Shortcuts: G + D (Drive), G + S (Starred), G + R (Shared), G + T (Trash)
+      if (e.key.toLowerCase() === "g") {
+        setLastKeyPressed("g");
+        setLastKeyTime(Date.now());
+      }
+
+      if (lastKeyPressed === "g" && Date.now() - lastKeyTime < 1000) {
+        const key = e.key.toLowerCase();
+        if (key === "d") {
+          e.preventDefault();
+          setCurrentFilter("all");
+          setLastKeyPressed(null);
+        } else if (key === "s") {
+          e.preventDefault();
+          setCurrentFilter("starred");
+          setLastKeyPressed(null);
+        } else if (key === "r") {
+          e.preventDefault();
+          setCurrentFilter("shared");
+          setLastKeyPressed(null);
+        } else if (key === "t") {
+          e.preventDefault();
+          setCurrentFilter("trashed");
+          setLastKeyPressed(null);
         }
       }
 
@@ -552,28 +908,15 @@ export default function App() {
     isMoveModalOpen,
     isNewFolderModalOpen,
     isUploadModalOpen,
+    isShortcutsModalOpen,
+    isAiAssistantOpen,
+    isMobileMenuOpen,
+    previewFile,
+    lastKeyPressed,
+    lastKeyTime,
     handleBatchDelete,
+    handleStar,
   ]);
-
-  const handleStar = async (file: DriveFile) => {
-    try {
-      const res = await fetch(`/api/drive/files/${file.id}/star`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ starred: !file.starred }),
-      });
-      if (res.ok) {
-        setFiles((prev) =>
-          prev.map((f) => (f.id === file.id ? { ...f, starred: !f.starred } : f))
-        );
-      }
-    } catch (err) {
-      console.error("Star toggle error:", err);
-    }
-  };
 
   const handleRename = async (file: DriveFile) => {
     const newName = window.prompt("Enter new file name:", file.name);
@@ -589,6 +932,7 @@ export default function App() {
         body: JSON.stringify({ name: newName.trim() }),
       });
       if (res.ok) {
+        addActivity("rename", file.name, `Renamed to: ${newName.trim()}`);
         setFiles((prev) =>
           prev.map((f) => (f.id === file.id ? { ...f, name: newName.trim() } : f))
         );
@@ -615,6 +959,7 @@ export default function App() {
         }
       );
       if (res.ok) {
+        addActivity("delete", file.name, isPermanent ? "Permanently deleted" : "Moved to trash");
         setFiles((prev) => prev.filter((f) => f.id !== file.id));
         loadDriveAbout();
       }
@@ -630,6 +975,7 @@ export default function App() {
         headers: getAuthHeaders(),
       });
       if (res.ok) {
+        addActivity("restore", file.name, "Restored from trash");
         setFiles((prev) => prev.filter((f) => f.id !== file.id));
         loadDriveAbout();
       }
@@ -656,6 +1002,7 @@ export default function App() {
       throw new Error(data.error || "Failed to create folder");
     }
 
+    addActivity("create_folder", folderName);
     loadFiles();
   };
 
@@ -675,6 +1022,7 @@ export default function App() {
       throw new Error(data.error || "Failed to upload file");
     }
 
+    addActivity("upload", file.name);
     loadFiles();
     loadDriveAbout();
   };
@@ -694,6 +1042,25 @@ export default function App() {
     } finally {
       setBatchActionLoading(false);
     }
+  };
+
+  const handleSendEmail = async (to: string, subject: string, body: string) => {
+    const res = await fetch("/api/gmail/messages/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ to, subject, body }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to send email");
+    }
+
+    addActivity("move", `Sent email to ${to}`); // Reusing activity type for simplicity
+    loadGmailMessages();
   };
 
   const handleSwitchAccount = (account: any) => {
@@ -729,6 +1096,15 @@ export default function App() {
         onLogin={handleLogin}
         onLogout={handleLogout}
         onOpenInstallModal={() => setIsInstallModalOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        activities={activities}
+        viewMode={appView}
+        onViewChange={(v) => {
+          setAppView(v);
+          setActiveThreadId(null);
+        }}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Container */}
@@ -747,18 +1123,22 @@ export default function App() {
           onSearchChange={setSearchQuery}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          onRefresh={() => {
-            loadDriveAbout();
-            loadFiles();
-          }}
-          isRefreshing={loadingFiles}
+          isRefreshing={appView === "drive" ? loadingFiles : loadingGmail}
           user={user}
           onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
           onSwitchAccount={handleSwitchAccount}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onRefresh={() => {
+            loadDriveAbout();
+            if (appView === "drive") loadFiles();
+            else loadGmailMessages();
+          }}
+          notifications={notifications}
+          onMarkNotificationAsRead={markNotificationAsRead}
+          onClearNotifications={clearNotifications}
         />
 
-        {/* View Content Body */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 md:pb-6 space-y-6">
           {!isAuthenticated ? (
             <AuthBanner
@@ -770,7 +1150,19 @@ export default function App() {
             <>
               {/* Path & Title Bar */}
               <div className="flex items-center justify-between gap-4">
-                {searchQuery ? (
+                {appView === "gmail" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        Gmail Inbox
+                      </h2>
+                      <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest">Workspace Email</p>
+                    </div>
+                  </div>
+                ) : searchQuery ? (
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold px-2.5 py-1 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-lg">
                       Search Results
@@ -793,171 +1185,185 @@ export default function App() {
                 )}
 
                 <div className="text-xs text-slate-400 font-medium">
-                  {files.length} {files.length === 1 ? "item" : "items"}
+                  {appView === "drive" 
+                    ? `${files.length} ${files.length === 1 ? "item" : "items"}`
+                    : `${gmailMessages.length} emails`}
                 </div>
               </div>
 
-              {/* Batch Action Toolbar */}
-              <BatchSelectionBar
-                selectedCount={selectedFileIds.length}
-                totalCount={files.length}
-                allSelected={selectedFileIds.length === files.length && files.length > 0}
-                onToggleSelectAll={handleToggleSelectAll}
-                onClearSelection={handleClearSelection}
-                onBatchDelete={handleBatchDelete}
-                onOpenBatchMove={() => setIsMoveModalOpen(true)}
-                onBatchRestore={handleBatchRestore}
-                isTrashed={currentFilter === "trashed"}
-                actionLoading={batchActionLoading}
-              />
+              {appView === "drive" ? (
+                <>
+                  {/* Batch Action Toolbar */}
+                  <BatchSelectionBar
+                    selectedCount={selectedFileIds.length}
+                    totalCount={files.length}
+                    allSelected={selectedFileIds.length === files.length && files.length > 0}
+                    onToggleSelectAll={handleToggleSelectAll}
+                    onClearSelection={handleClearSelection}
+                    onBatchDelete={handleBatchDelete}
+                    onOpenBatchMove={() => setIsMoveModalOpen(true)}
+                    onBatchRestore={handleBatchRestore}
+                    isTrashed={currentFilter === "trashed"}
+                    actionLoading={batchActionLoading}
+                  />
 
-              {/* Error State */}
-              {error && (
-                <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs font-medium">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
-                  <span className="flex-1">{error}</span>
-                  <button
-                    onClick={loadFiles}
-                    className="px-3 py-1 bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              {/* Main Views: Analytics or File Listing */}
-              {currentFilter === "analytics" ? (
-                <StorageAnalytics
-                  files={files}
-                  quota={quota}
-                  onOpenTrash={() => setCurrentFilter("trashed")}
-                />
-              ) : loadingFiles ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                  <p className="text-xs font-medium">Fetching files from Google Drive...</p>
-                </div>
-              ) : files.length === 0 ? (
-                /* Empty State */
-                <div className="flex flex-col items-center justify-center py-20 text-center max-w-sm mx-auto">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
-                    {currentFilter === "folders" ? (
-                      <Folder className="w-6 h-6 text-amber-500" />
-                    ) : (
-                      <HardDrive className="w-6 h-6 text-blue-500" />
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm mb-1">
-                    No files found
-                  </h3>
-                  <p className="text-xs text-slate-400 mb-6">
-                    {searchQuery
-                      ? "No files or folders matched your search."
-                      : currentFilter === "starred"
-                      ? "You haven't starred any files yet."
-                      : currentFilter === "shared"
-                      ? "No files shared with you found."
-                      : currentFilter === "trashed"
-                      ? "Your Trash is empty."
-                      : "This folder is empty. Upload a file or create a folder to get started."}
-                  </p>
-                  {currentFilter === "all" && !searchQuery && (
-                    <div className="flex gap-2">
+                  {/* Error State */}
+                  {error && (
+                    <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-3 text-rose-700 dark:text-rose-300 text-xs font-medium">
+                      <AlertCircle className="w-5 h-5 shrink-0" />
+                      <span className="flex-1">{error}</span>
                       <button
-                        onClick={() => setIsUploadModalOpen(true)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                        onClick={loadFiles}
+                        className="px-3 py-1 bg-rose-100 dark:bg-rose-900 hover:bg-rose-200 rounded-lg transition-colors cursor-pointer"
                       >
-                        Upload File
-                      </button>
-                      <button
-                        onClick={() => setIsNewFolderModalOpen(true)}
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
-                      >
-                        New Folder
+                        Retry
                       </button>
                     </div>
                   )}
-                </div>
-              ) : viewMode === "grid" ? (
-                /* Grid View */
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                  {files.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      onOpenFolder={handleOpenFolder}
-                      onSelectFile={(f) => setPreviewFile(f)}
-                      onStar={handleStar}
-                      onRename={handleRename}
-                      onDelete={handleDelete}
-                      onRestore={handleRestore}
-                      onShare={(f) => setShareFile(f)}
-                      onSummarize={(f) => setSummaryFile(f)}
-                      onOpenMobileActions={(f) => setActiveMobileActionFile(f)}
-                      isTrashed={currentFilter === "trashed" || file.trashed}
-                      isSelected={selectedFileIds.includes(file.id)}
-                      onToggleSelect={handleToggleSelectFile}
-                      hasSelection={selectedFileIds.length > 0}
+
+                  {/* Main Views: Analytics or File Listing */}
+                  {currentFilter === "analytics" ? (
+                    <StorageAnalytics
+                      files={files}
+                      quota={quota}
+                      onOpenTrash={() => setCurrentFilter("trashed")}
                     />
-                  ))}
-                </div>
+                  ) : loadingFiles ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                      <p className="text-xs font-medium">Fetching files from Google Drive...</p>
+                    </div>
+                  ) : files.length === 0 ? (
+                    /* Empty State with Illustration */
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center animate-in zoom-in-95 duration-500">
+                      <div className="relative mb-8">
+                        <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
+                        <img 
+                          src="/src/assets/images/drive_hero_illustration_1789047466923.jpg" 
+                          alt="Empty Drive" 
+                          className="relative w-72 h-auto rounded-3xl shadow-2xl border border-white/20 dark:border-slate-800"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">No files found</h3>
+                      <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                        Your drive looks a bit lonely. Start by uploading some files or creating a new folder to stay organized.
+                      </p>
+                      <div className="flex items-center justify-center gap-3 mt-8">
+                        <button 
+                          onClick={() => setIsUploadModalOpen(true)}
+                          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-semibold transition-all shadow-lg shadow-blue-600/20 active:scale-95 cursor-pointer"
+                        >
+                          Upload File
+                        </button>
+                        <button 
+                          onClick={() => setIsNewFolderModalOpen(true)}
+                          className="px-6 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-semibold border border-slate-200 dark:border-slate-700 transition-all active:scale-95 cursor-pointer"
+                        >
+                          New Folder
+                        </button>
+                      </div>
+                    </div>
+                  ) : viewMode === "grid" ? (
+                    /* Grid View */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {files.map((file) => (
+                        <FileCard
+                          key={file.id}
+                          file={file}
+                          onOpenFolder={handleOpenFolder}
+                          onSelectFile={(f) => setPreviewFile(f)}
+                          onStar={handleStar}
+                          onRename={handleRename}
+                          onDelete={handleDelete}
+                          onRestore={handleRestore}
+                          onShare={(f) => setShareFile(f)}
+                          onSummarize={(f) => setSummaryFile(f)}
+                          onOpenMobileActions={(f) => setActiveMobileActionFile(f)}
+                          isTrashed={currentFilter === "trashed" || file.trashed}
+                          isSelected={selectedFileIds.includes(file.id)}
+                          onToggleSelect={handleToggleSelectFile}
+                          hasSelection={selectedFileIds.length > 0}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    /* List View Table */
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-800/40">
+                              <th className="py-3 pl-4 pr-1 w-10">
+                                <div
+                                  onClick={handleToggleSelectAll}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                                    selectedFileIds.length === files.length && files.length > 0
+                                      ? "bg-blue-600 border-blue-600 text-white"
+                                      : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
+                                  }`}
+                                  title={
+                                    selectedFileIds.length === files.length
+                                      ? "Deselect all"
+                                      : "Select all"
+                                  }
+                                >
+                                  {selectedFileIds.length === files.length && files.length > 0 && (
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  )}
+                                </div>
+                              </th>
+                              <th className="py-3 px-3">Name</th>
+                              <th className="py-3 px-4 hidden lg:table-cell">Type</th>
+                              <th className="py-3 px-4 hidden md:table-cell">Last Modified</th>
+                              <th className="py-3 px-4 hidden sm:table-cell">Size</th>
+                              <th className="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {files.map((file) => (
+                              <FileTableRow
+                                key={file.id}
+                                file={file}
+                                onOpenFolder={handleOpenFolder}
+                                onSelectFile={(f) => setPreviewFile(f)}
+                                onStar={handleStar}
+                                onRename={handleRename}
+                                onDelete={handleDelete}
+                                onRestore={handleRestore}
+                                onShare={(f) => setShareFile(f)}
+                                onSummarize={(f) => setSummaryFile(f)}
+                                onOpenMobileActions={(f) => setActiveMobileActionFile(f)}
+                                isTrashed={currentFilter === "trashed" || file.trashed}
+                                isSelected={selectedFileIds.includes(file.id)}
+                                onToggleSelect={handleToggleSelectFile}
+                                hasSelection={selectedFileIds.length > 0}
+                              />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
-                /* List View Table */
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider bg-slate-50/50 dark:bg-slate-800/40">
-                          <th className="py-3 pl-4 pr-1 w-10">
-                            <div
-                              onClick={handleToggleSelectAll}
-                              className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
-                                selectedFileIds.length === files.length && files.length > 0
-                                  ? "bg-blue-600 border-blue-600 text-white"
-                                  : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700"
-                              }`}
-                              title={
-                                selectedFileIds.length === files.length
-                                  ? "Deselect all"
-                                  : "Select all"
-                              }
-                            >
-                              {selectedFileIds.length === files.length && files.length > 0 && (
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              )}
-                            </div>
-                          </th>
-                          <th className="py-3 px-3">Name</th>
-                          <th className="py-3 px-4">Type</th>
-                          <th className="py-3 px-4">Last Modified</th>
-                          <th className="py-3 px-4">Size</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {files.map((file) => (
-                          <FileTableRow
-                            key={file.id}
-                            file={file}
-                            onOpenFolder={handleOpenFolder}
-                            onSelectFile={(f) => setPreviewFile(f)}
-                            onStar={handleStar}
-                            onRename={handleRename}
-                            onDelete={handleDelete}
-                            onRestore={handleRestore}
-                            onShare={(f) => setShareFile(f)}
-                            onSummarize={(f) => setSummaryFile(f)}
-                            onOpenMobileActions={(f) => setActiveMobileActionFile(f)}
-                            isTrashed={currentFilter === "trashed" || file.trashed}
-                            isSelected={selectedFileIds.includes(file.id)}
-                            onToggleSelect={handleToggleSelectFile}
-                            hasSelection={selectedFileIds.length > 0}
-                          />
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <>
+                  {activeThreadId ? (
+                    <GmailThreadView 
+                      threadId={activeThreadId}
+                      onBack={() => setActiveThreadId(null)}
+                      onSendReply={handleSendEmail}
+                    />
+                  ) : (
+                    <GmailView 
+                      messages={gmailMessages} 
+                      loading={loadingGmail} 
+                      onRefresh={loadGmailMessages} 
+                      onCompose={() => setIsComposeModalOpen(true)}
+                      onSelectMessage={(tid) => setActiveThreadId(tid)}
+                    />
+                  )}
+                </>
               )}
             </>
           )}
@@ -968,6 +1374,8 @@ export default function App() {
           currentFilter={currentFilter}
           onFilterSelect={handleFilterSelect}
           onOpenUpload={() => setIsUploadModalOpen(true)}
+          onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
       </div>
 
@@ -1018,6 +1426,13 @@ export default function App() {
         file={shareFile}
         isOpen={shareFile !== null}
         onClose={() => setShareFile(null)}
+        onShareSuccess={(fileName, email) => {
+          addNotification(
+            "File Shared",
+            `Successfully shared "${fileName}" with ${email}.`,
+            "drive"
+          );
+        }}
       />
 
       {/* Modals */}
@@ -1051,6 +1466,17 @@ export default function App() {
       <InstallModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      <ComposeEmailModal
+        isOpen={isComposeModalOpen}
+        onClose={() => setIsComposeModalOpen(false)}
+        onSend={handleSendEmail}
       />
     </div>
   );

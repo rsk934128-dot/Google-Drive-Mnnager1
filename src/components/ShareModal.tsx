@@ -20,12 +20,14 @@ interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdatePermissions?: (fileId: string, permissions: FilePermission[]) => void;
+  onShareSuccess?: (fileName: string, email: string) => void;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
   file,
   isOpen,
   onClose,
+  onShareSuccess,
 }) => {
   const [emailInput, setEmailInput] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<"reader" | "commenter" | "writer">("reader");
@@ -77,9 +79,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       };
 
       setPeopleWithAccess((prev) => [...prev, newPerm]);
+      const email = emailInput.trim();
       setEmailInput("");
       setIsSubmitting(false);
-      setSuccessMessage(`Access granted to ${emailInput.trim()}`);
+      setSuccessMessage(`Access granted to ${email}`);
+      if (onShareSuccess && file) {
+        onShareSuccess(file.name, email);
+      }
       setTimeout(() => setSuccessMessage(null), 3000);
     }, 600);
   };

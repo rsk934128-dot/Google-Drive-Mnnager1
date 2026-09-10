@@ -1,0 +1,58 @@
+{
+  "collections": {
+    "users": {
+      "documents": {
+        "{userId}": {
+          "fields": {
+            "name": "string",
+            "email": "string",
+            "picture": "string",
+            "lastLogin": "timestamp"
+          }
+        }
+      }
+    },
+    "activities": {
+      "documents": {
+        "{userId}": {
+          "collections": {
+            "items": {
+              "documents": {
+                "{activityId}": {
+                  "fields": {
+                    "type": "string",
+                    "fileName": "string",
+                    "timestamp": "timestamp",
+                    "details": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "notifications": {
+      "documents": {
+        "{userId}": {
+          "collections": {
+            "items": {
+              "documents": {
+                "{notificationId}": {
+                  "fields": {
+                    "title": "string",
+                    "message": "string",
+                    "type": "string",
+                    "read": "boolean",
+                    "timestamp": "timestamp",
+                    "link": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

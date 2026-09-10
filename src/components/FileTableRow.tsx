@@ -129,19 +129,19 @@ export const FileTableRow: React.FC<FileTableRowProps> = ({
       </td>
 
       {/* Type */}
-      <td className="py-3 px-4">
+      <td className="py-3 px-4 hidden lg:table-cell">
         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${typeInfo.color}`}>
           {typeInfo.label}
         </span>
       </td>
 
       {/* Last Modified */}
-      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap hidden md:table-cell">
         {formatDate(file.modifiedTime)}
       </td>
 
       {/* Size */}
-      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap hidden sm:table-cell">
         {isFolder ? "--" : formatBytes(file.size)}
       </td>
 

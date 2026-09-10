@@ -113,12 +113,39 @@ async function getDriveClient(req: express.Request, res: express.Response) {
   return google.drive({ version: "v3", auth: oauth2Client });
 }
 
+// Helper to get authenticated Gmail client from request
+async function getGmailClient(req: express.Request, res: express.Response) {
+  let accessToken = req.cookies.drive_access_token;
+  let refreshToken = req.cookies.drive_refresh_token;
+
+  const authHeader = req.headers.authorization;
+  if (!accessToken && authHeader && authHeader.startsWith("Bearer ")) {
+    accessToken = authHeader.substring(7);
+  }
+  if (!refreshToken && req.headers["x-refresh-token"]) {
+    refreshToken = req.headers["x-refresh-token"] as string;
+  }
+
+  if (!accessToken && !refreshToken) {
+    throw new Error("UNAUTHENTICATED");
+  }
+
+  const oauth2Client = getOAuth2Client(req);
+  oauth2Client.setCredentials({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  return google.gmail({ version: "v1", auth: oauth2Client });
+}
+
 // ==================== AUTH ROUTES ====================
 
 app.get("/auth/google", (req, res) => {
   const oauth2Client = getOAuth2Client(req);
   const scopes = [
     "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/userinfo.email",
   ];
@@ -359,15 +386,15 @@ app.post("/api/drive/folders", async (req, res) => {
 app.post("/api/drive/files/upload", upload.single("file"), async (req, res) => {
   try {
     const drive = await getDriveClient(req, res);
-    const file = req.file;
+    const file = (req as any).file;
     const parentId = req.body.parentId || "root";
 
     if (!file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const stream = require("stream");
-    const bufferStream = new stream.PassThrough();
+    const { PassThrough } = await import("stream");
+    const bufferStream = new PassThrough();
     bufferStream.end(file.buffer);
 
     const fileMetadata = {
@@ -674,6 +701,179 @@ app.get("/api/drive/files/:fileId/download", async (req, res) => {
     }
     console.error("Download proxy error:", error);
     res.status(500).json({ error: error.message || "Failed to download file" });
+  }
+});
+
+// ==================== GMAIL API ROUTES ====================
+
+app.get("/api/gmail/messages", async (req, res) => {
+  try {
+    const gmail = await getGmailClient(req, res);
+    const { q = "", pageToken } = req.query;
+
+    const response = await gmail.users.messages.list({
+      userId: "me",
+      q: q as string,
+      maxResults: 20,
+      pageToken: (pageToken as string) || undefined,
+    });
+
+    const messages = response.data.messages || [];
+    const details = await Promise.all(
+      messages.map(async (msg) => {
+        const fullMsg = await gmail.users.messages.get({
+          userId: "me",
+          id: msg.id!,
+          format: "metadata",
+          metadataHeaders: ["Subject", "From", "Date"],
+        });
+        return {
+          id: msg.id,
+          threadId: msg.threadId,
+          snippet: fullMsg.data.snippet,
+          subject: fullMsg.data.payload?.headers?.find((h) => h.name === "Subject")?.value,
+          from: fullMsg.data.payload?.headers?.find((h) => h.name === "From")?.value,
+          date: fullMsg.data.payload?.headers?.find((h) => h.name === "Date")?.value,
+          labelIds: fullMsg.data.labelIds,
+        };
+      })
+    );
+
+    res.json({
+      messages: details,
+      nextPageToken: response.data.nextPageToken,
+    });
+  } catch (error: any) {
+    if (error.message === "UNAUTHENTICATED") {
+      return res.status(401).json({ error: "Unauthenticated" });
+    }
+    console.error("Gmail list error:", error);
+    res.status(500).json({ error: error.message || "Failed to list emails" });
+  }
+});
+
+app.post("/api/gmail/messages/send", async (req, res) => {
+  try {
+    const gmail = await getGmailClient(req, res);
+    const { to, subject, body, threadId } = req.body;
+
+    if (!to || !subject || !body) {
+      return res.status(400).json({ error: "to, subject, and body are required" });
+    }
+
+    // Prepare raw message in RFC 2822 format
+    const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString("base64")}?=`;
+    const messageParts = [
+      `To: ${to}`,
+      "Content-Type: text/html; charset=utf-8",
+      "MIME-Version: 1.0",
+      `Subject: ${utf8Subject}`,
+    ];
+
+    if (threadId) {
+      // In a real app we'd also add In-Reply-To and References headers here
+    }
+
+    messageParts.push("", body);
+    const message = messageParts.join("\r\n");
+
+    const encodedMessage = Buffer.from(message)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+
+    const response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: encodedMessage,
+        threadId: threadId,
+      },
+    });
+
+    res.json({ success: true, messageId: response.data.id });
+  } catch (error: any) {
+    if (error.message === "UNAUTHENTICATED") {
+      return res.status(401).json({ error: "Unauthenticated" });
+    }
+    console.error("Gmail send error:", error);
+    res.status(500).json({ error: error.message || "Failed to send email" });
+  }
+});
+
+app.get("/api/gmail/threads/:threadId", async (req, res) => {
+  try {
+    const gmail = await getGmailClient(req, res);
+    const { threadId } = req.params;
+
+    const response = await gmail.users.threads.get({
+      userId: "me",
+      id: threadId,
+      format: "full",
+    });
+
+    const thread = response.data;
+    const messages = thread.messages?.map((msg) => {
+      const headers = msg.payload?.headers || [];
+      const getHeader = (name: string) => headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
+
+      // Extract body and attachments
+      let body = "";
+      const attachments: any[] = [];
+
+      const processPart = (part: any) => {
+        if (part.filename && part.body?.attachmentId) {
+          attachments.push({
+            attachmentId: part.body.attachmentId,
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body.size,
+            messageId: msg.id
+          });
+        }
+        
+        if (part.mimeType === "text/html" && part.body?.data) {
+          body = Buffer.from(part.body.data, "base64").toString("utf-8");
+        } else if (part.mimeType === "text/plain" && part.body?.data && !body) {
+          body = Buffer.from(part.body.data, "base64").toString("utf-8");
+        }
+
+        if (part.parts) {
+          part.parts.forEach(processPart);
+        }
+      };
+
+      if (msg.payload?.parts) {
+        msg.payload.parts.forEach(processPart);
+      } else if (msg.payload?.body?.data) {
+        body = Buffer.from(msg.payload.body.data, "base64").toString("utf-8");
+      }
+
+      return {
+        id: msg.id,
+        threadId: msg.threadId,
+        snippet: msg.snippet,
+        from: getHeader("from"),
+        to: getHeader("to"),
+        subject: getHeader("subject"),
+        date: getHeader("date"),
+        body: body,
+        attachments: attachments,
+        labelIds: msg.labelIds,
+      };
+    });
+
+    res.json({
+      id: thread.id,
+      historyId: thread.historyId,
+      messages: messages,
+    });
+  } catch (error: any) {
+    if (error.message === "UNAUTHENTICATED") {
+      return res.status(401).json({ error: "Unauthenticated" });
+    }
+    console.error("Gmail thread fetch error:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch thread" });
   }
 });
 

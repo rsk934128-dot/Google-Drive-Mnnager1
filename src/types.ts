@@ -54,6 +54,55 @@ export type FilterCategory =
 
 export type ViewMode = "grid" | "list";
 
+export type ActivityType =
+  | "upload"
+  | "delete"
+  | "move"
+  | "rename"
+  | "star"
+  | "unstar"
+  | "create_folder"
+  | "restore";
+
+export interface Activity {
+  id: string;
+  type: ActivityType;
+  fileName: string;
+  timestamp: number;
+  userId?: string;
+  details?: string;
+}
+
+export interface GmailMessage {
+  id: string;
+  threadId: string;
+  snippet: string;
+  subject?: string;
+  from?: string;
+  date?: string;
+  labelIds?: string[];
+}
+
+export interface GmailAttachment {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  messageId: string;
+}
+
+export interface GmailMessageFull extends GmailMessage {
+  body?: string;
+  to?: string;
+  attachments?: GmailAttachment[];
+}
+
+export interface GmailThread {
+  id: string;
+  historyId: string;
+  messages: GmailMessageFull[];
+}
+
 export interface FilePermission {
   id: string;
   role: "owner" | "writer" | "commenter" | "reader";
@@ -61,4 +110,14 @@ export interface FilePermission {
   emailAddress?: string;
   displayName?: string;
   photoLink?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: "gmail" | "drive" | "storage";
+  read: boolean;
+  timestamp: number;
+  link?: string;
 }

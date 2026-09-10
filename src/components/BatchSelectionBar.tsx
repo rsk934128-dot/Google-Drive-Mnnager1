@@ -79,7 +79,9 @@ export const BatchSelectionBar: React.FC<BatchSelectionBarProps> = ({
             disabled={actionLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" /> Restore ({selectedCount})
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Restore ({selectedCount})</span>
+            <span className="sm:hidden">Restore</span>
           </button>
         )}
 
@@ -89,7 +91,9 @@ export const BatchSelectionBar: React.FC<BatchSelectionBarProps> = ({
             disabled={actionLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
-            <FolderInput className="w-3.5 h-3.5" /> Move ({selectedCount})
+            <FolderInput className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Move ({selectedCount})</span>
+            <span className="sm:hidden">Move</span>
           </button>
         )}
 
@@ -103,7 +107,12 @@ export const BatchSelectionBar: React.FC<BatchSelectionBarProps> = ({
           }`}
         >
           <Trash2 className="w-3.5 h-3.5" />
-          {isTrashed ? `Delete Permanently (${selectedCount})` : `Trash (${selectedCount})`}
+          <span className="hidden sm:inline">
+            {isTrashed ? `Delete Permanently (${selectedCount})` : `Trash (${selectedCount})`}
+          </span>
+          <span className="sm:hidden">
+            {isTrashed ? "Delete" : "Trash"}
+          </span>
         </button>
 
         <button

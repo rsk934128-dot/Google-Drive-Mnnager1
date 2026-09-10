@@ -83,7 +83,7 @@ export const InstallModal: React.FC<InstallModalProps> = ({ isOpen, onClose }) =
         <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/src/assets/images/app_logo_1785870607984.jpg"
+              src="/icon-192.png"
               alt="App Logo"
               className="w-12 h-12 rounded-xl object-cover shadow-md ring-2 ring-blue-500/20"
             />
